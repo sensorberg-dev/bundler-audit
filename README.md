@@ -116,6 +116,11 @@ Ignore specific advisories:
 
     $ bundle audit check --ignore OSVDB-108664
 
+Write to an HTML file:
+
+    $ bundle-audit -o=tmp/audit.html
+
+
 Rake task:
 
 ```ruby
