@@ -22,6 +22,7 @@ require 'bundler/audit/html_creator'
 require 'thor'
 require 'bundler'
 require 'bundler/vendored_thor'
+require 'json'
 
 module Bundler
   module Audit
@@ -34,6 +35,7 @@ module Bundler
       method_option :quiet, :type => :boolean, :aliases => '-q'
       method_option :verbose, :type => :boolean, :aliases => '-v'
       method_option :ignore, :type => :array, :aliases => '-i'
+      method_option :json, :type => :boolean, :aliases => '-j'
       method_option :update, :type => :boolean, :aliases => '-u'
       method_option :output, :type => :string, :aliases => '-o'
 
@@ -43,54 +45,68 @@ module Bundler
         scanner    = Scanner.new
         vulnerable = false
 
-        file_name     = options[:output]
-        if file_name
-          @html_creator    = HTMLCreator.from file_name
-          results          = scanner.scan(:ignore => options.ignore)
-          insecure_sources = results.select { |result| result.is_a? Scanner::InsecureSource }
-          vulnerable_gems  = results.select { |result| result.is_a? Scanner::UnpatchedGem }
+        json_result = {insecure_sources: [], insecure_gems: []}
+        file_name = options[:output]
 
-          @html_creator.write_top_html insecure_sources.count, vulnerable_gems.count
+        results          = scanner.scan(:ignore => options.ignore)
+        insecure_sources = results.select { |result| result.is_a? Scanner::InsecureSource }
+        vulnerable_gems  = results.select { |result| result.is_a? Scanner::UnpatchedGem }
 
-          if insecure_sources.any?
-            vulnerable = true
-            @html_creator.write_list_top
-            insecure_sources.each { |result| @html_creator.write_source_warning result.name, result.source }
-            @html_creator.write_list_bottom
-          end
-
-          if vulnerable_gems.any?
-            vulnerable = true
-            @html_creator.write_table_top
-            vulnerable_gems.each { |result| @html_creator.write_advisory result.gem, result.advisory }
-            @html_creator.write_table_bottom
-          end
-
-          @html_creator.done!
-        else
-          scanner.scan(:ignore => options.ignore) do |result|
-            vulnerable = true
-
-            case result
-            when Scanner::InsecureSource
+        if insecure_sources.any?
+          vulnerable = true
+          insecure_sources.each do |result|
+            if not options.json?
               print_warning "Insecure Source URI found: #{result.source}"
-            when Scanner::UnpatchedGem
-              print_advisory result.gem, result.advisory
+            else
+              json_result[:insecure_sources].push(result.source)
             end
           end
         end
 
+        if vulnerable_gems.any?
+          vulnerable = true
+          vulnerable_gems.each do |result|
+            if not options.json?
+              print_advisory result.gem, result.advisory
+            else
+              json_result[:insecure_gems].push(:name => result.gem.name, :version => result.gem.version, :issues => [:name => (result.advisory.cve ? ("CVE-" + result.advisory.cve) : ("OSVDB-" + result.advisory.osvdb.to_s)), :short_desc => result.advisory.title, :description => result.advisory.description, :risk => (result.advisory.criticality ? result.advisory.criticality : "unknown")])
+            end
+          end
+        end
+
+        if file_name
+          html_creator = HTMLCreator.from file_name
+          html_creator.write_top_html insecure_sources.count, vulnerable_gems.count
+
+          if insecure_sources.any?
+            html_creator.write_list_top
+            insecure_sources.each { |result| html_creator.write_source_warning result.name, result.source }
+            html_creator.write_list_bottom
+          end
+
+          if vulnerable_gems.any?
+            html_creator.write_table_top
+            vulnerable_gems.each { |result| html_creator.write_advisory result.gem, result.advisory }
+            html_creator.write_table_bottom
+          end
+
+          html_creator.done!
+        end
+
+        if options.json?
+          puts json_result.to_json
+        end
+
         if vulnerable
-          say "Vulnerabilities found!", :red
+          say "Vulnerabilities found!", :red unless options.json?
           exit 1
         else
-          say("No vulnerabilities found", :green) unless options.quiet?
+          say("No vulnerabilities found", :green) unless options.quiet? || options.json?
         end
       end
 
       desc 'update', 'Updates the ruby-advisory-db'
       method_option :quiet, :type => :boolean, :aliases => '-q'
-
       def update
         say("Updating ruby-advisory-db ...") unless options.quiet?
 
