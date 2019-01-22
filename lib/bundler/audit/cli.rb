@@ -38,11 +38,13 @@ module Bundler
       method_option :json, :type => :boolean, :aliases => '-j'
       method_option :update, :type => :boolean, :aliases => '-u'
       method_option :output, :type => :string, :aliases => '-o'
+      method_option :gemfile, :type => :string, :aliases => '-g'
 
       def check
         update if options[:update]
 
-        scanner    = Scanner.new
+        gemfile_lock_path = options[:gemfile] ? options[:gemfile] + '.lock' : File.join(Dir.pwd, 'Gemfile.lock')
+        scanner    = Scanner.new(gemfile_lock_path)
         vulnerable = false
 
         json_result = {insecure_sources: [], insecure_gems: []}
