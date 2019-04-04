@@ -43,7 +43,7 @@ module Bundler
       def check
         update if options[:update]
 
-        gemfile_lock_path = options[:gemfile] ? options[:gemfile] + '.lock' : File.join(Dir.pwd, 'Gemfile.lock')
+        gemfile_lock_path = options[:gemfile] ? options[:gemfile] : File.join(Dir.pwd, 'Gemfile.lock')
         scanner    = Scanner.new(gemfile_lock_path)
         vulnerable = false
 
